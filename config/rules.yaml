@@ -1,0 +1,36 @@
+# Every threshold, window, and rate the detection layer uses lives here --
+# no magic numbers in rule code, so tuning a rule never means editing Python.
+
+rules:
+  duplicate:
+    enabled: true
+    severity: high
+    # Same vendor + same posting date + same amount, count >= min_count.
+    min_count: 2
+    # ...but only when repeating is UNUSUAL for that vendor. If a vendor
+    # bills a repeated amount on more than this fraction of their other
+    # billing days, that is simply how they invoice (instalments,
+    # per-unit/per-vehicle billing) and is not flagged. A vendor doing it
+    # for the first time always alerts, regardless of this rate.
+    normal_repeat_rate: 0.10
+
+  same_day_count:
+    enabled: true
+    severity: medium
+    # Fires when a vendor posts MORE INVOICES IN ONE DAY THAN EVER BEFORE --
+    # a new personal high -- and that count is also above this floor. A
+    # vendor going from 1 to 3 invoices/day set a new high but that alone
+    # is not remarkable; the floor keeps trivial "highs" quiet.
+    max_documents_per_day: 5
+
+  amount_spike:
+    enabled: true
+    severity: high
+    # Fires when an invoice is more than percent_above% above the LARGEST
+    # invoice that vendor billed in the preceding comparison_months --
+    # i.e. a new high for that vendor over a meaningful stretch of time.
+    percent_above: 50
+    comparison_months: 12
+    # Cold-start guard: a vendor needs at least this many invoices inside
+    # the comparison window before "new high" means anything.
+    min_history_count: 3
