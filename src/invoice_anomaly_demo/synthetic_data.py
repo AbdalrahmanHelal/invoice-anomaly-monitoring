@@ -1,27 +1,13 @@
-"""Synthetic vendor ledgers for the demo.
+"""Synthetic vendor ledgers for the demo. Every name, amount, and invoice ID
+is generated -- nothing here is real. What's deliberately preserved is the
+*shape* of accounts-payable data that makes naive, fixed-threshold anomaly
+rules unusable (see README): stable ordinary vendors, a vendor that
+routinely repeats amounts, a vendor with predictable batch volume, and a
+couple of genuine anomalies seeded so the demo has something real to catch.
 
-Stands in for a live source system (in the system this demo is based on,
-that was an ERP export). Nothing here is real: vendor names, amounts, and
-invoice IDs are all generated. What IS deliberately preserved is the
-*shape* of real accounts-payable data that made naive anomaly rules
-unusable in practice:
-
-  - most vendors have a stable "normal" amount and cadence
-  - a handful of vendors bill the exact same amount more than once on the
-    same day as a matter of routine (instalments, per-unit/per-vehicle
-    billing) -- not a duplicate, just how they invoice
-  - one vendor does routine month-end batching: many documents on the
-    same day, every month, which a flat "more than N per day" rule
-    mistakes for a spike
-  - a couple of genuine anomalies are seeded on purpose so the demo has
-    something real to catch: an amount far above a vendor's historical
-    range, and a duplicate-looking pair for a vendor who has never
-    repeated an amount before
-
-`generate_demo_dataset()` returns each vendor's full history (everything
-before "today") separately from "today's activity" (what a monitoring run
-would just have fetched) -- the same split the real pipeline makes between
-a vendor's baseline and the invoices actually eligible to alert on.
+`generate_demo_dataset()` splits each vendor's history (before "today")
+from "today's activity" -- the same split a real pipeline makes between a
+vendor's baseline and the invoices actually eligible to alert on.
 """
 from __future__ import annotations
 
@@ -80,10 +66,8 @@ def _regular_vendor(rng: random.Random, vendor_id: str, name: str, base_amount: 
 
 def _repeat_billing_vendor(rng: random.Random, vendor_id: str, name: str, unit_amount: int, months: int) -> list[Invoice]:
     """A vendor who routinely bills the same amount 2-3 times on one day
-    (per-unit/per-vehicle billing, or instalments). Real production data
-    showed this pattern occurring on 20-50% of a vendor's billing days --
-    a naive "same vendor + same day + same amount = duplicate" rule fires
-    constantly on vendors like this and teaches readers to ignore alerts."""
+    (per-unit/per-vehicle billing, or instalments) -- the case the
+    duplicate rule's suppression exists for."""
     start = _TODAY - datetime.timedelta(days=months * 30)
     invoices = []
     seq = 0
@@ -106,11 +90,9 @@ def _repeat_billing_vendor(rng: random.Random, vendor_id: str, name: str, unit_a
 
 
 def _month_end_batch_vendor(rng: random.Random, vendor_id: str, name: str, unit_amount: int, months: int) -> list[Invoice]:
-    """A vendor whose volume spikes predictably at month-end (e.g. a
-    services company reconciling many small jobs at once). Real data showed
-    a vendor exceeding a flat "more than 5 documents/day" threshold on
-    ~8% of active days purely from this pattern, with a genuine historical
-    high in the double digits -- a flat per-day cap flags it as new."""
+    """A vendor whose volume predictably spikes at month-end (e.g. a
+    services company reconciling many small jobs at once) -- the case the
+    same_day_count rule's own-record comparison exists for."""
     start = _TODAY - datetime.timedelta(days=months * 30)
     invoices = []
     seq = 0

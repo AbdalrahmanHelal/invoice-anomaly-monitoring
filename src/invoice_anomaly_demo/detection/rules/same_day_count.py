@@ -1,20 +1,9 @@
 """Rule: unusual same-day invoice volume, judged against the vendor's own record.
 
-Fires when a vendor posts more invoices in one day than they ever have
-before -- a new personal high -- and that count is also at least
-`max_documents_per_day` (a floor, not a per-vendor threshold on its own).
-
-A flat "more than N documents in a day" rule misreads vendors with
-predictable batching -- month-end reconciliation is the common case -- as
-having a volume spike every time their normal cycle repeats. Comparing
-against the vendor's own history catches an actual first-time spike while
-staying quiet through routine batching, however large that batch normally
-is.
-
-The floor still matters on its own: a vendor who has only ever posted 1-2
-invoices a day going to 3 technically sets a new high, but that is not
-remarkable enough to say anything about. `max_documents_per_day` keeps
-that floor while the new-high test supplies the per-vendor judgment.
+Fires when a vendor posts more invoices in one day than ever before -- a
+new personal high -- and that count also clears `max_documents_per_day`
+(a floor, not a per-vendor threshold on its own; see README for why both
+parts matter).
 """
 from __future__ import annotations
 

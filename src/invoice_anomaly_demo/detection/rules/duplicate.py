@@ -1,26 +1,10 @@
 """Rule: duplicate invoice, suppressed when it is routine for that vendor.
 
 Fires when a vendor has >= min_count invoices for the exact same amount on
-the exact same day -- but only when that is *unusual for that vendor*.
-
-The suppression is the whole point. Same-amount-same-day is routine billing
-for a real slice of vendors: instalment plans, or per-unit/per-vehicle
-invoicing where several units happen to cost the same. A naive "same
-vendor + same day + same amount" rule fires on every one of those routine
-days and trains readers to ignore the alert stream entirely -- which is
-worse than not alerting, because it also buries the rare genuine case.
-
-So each repeated-amount group is judged against how often the vendor
-repeats an amount on *other* days:
-
-  - never done it before  -> alert (this is genuinely new for them)
-  - rare, but has happened -> still alert (unusual, not unprecedented,
-    is exactly what is worth a look)
-  - happens on more than `normal_repeat_rate` of their other billing days
-    -> that is just how they invoice, stay quiet
-
-The day being judged is excluded from its own baseline, so a vendor can
-never accumulate enough history on the flagged day itself to justify it.
+the exact same day, unless that vendor already repeats amounts on more than
+`normal_repeat_rate` of their *other* billing days (see README for why).
+The day being judged is excluded from its own baseline so it can never
+justify itself.
 """
 from __future__ import annotations
 

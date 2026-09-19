@@ -1,12 +1,4 @@
-"""Human-readable alert digest.
-
-Deliberately plain text to stdout rather than HTML/SMTP: this demo has no
-mail server or credentials to configure, and a terminal-readable digest is
-enough to show the same information design decision the production version
-makes -- lead with vendor and amount, state the plain-language reason, keep
-the identifiers to a quiet trailing line, and never repeat threshold/median
-arithmetic the reader would have to interpret.
-"""
+"""Human-readable alert digest: plain text to stdout, no mail server needed."""
 from __future__ import annotations
 
 from invoice_anomaly_demo.detection.rules.base import AlertCandidate

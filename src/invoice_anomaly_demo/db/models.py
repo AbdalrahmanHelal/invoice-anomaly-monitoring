@@ -12,14 +12,10 @@ class Base(DeclarativeBase):
 
 
 class Alert(Base):
-    """One row per anomaly. Carries its own snapshot of the invoice fields
-    it refers to rather than a foreign key, since this demo -- like the
-    system it is based on -- treats the source ledger as the system of
-    record and never mirrors it locally. Only the alert itself persists.
-
-    The (vendor_id, invoice_id, rule_name) unique constraint is the dedup
-    guard: a given invoice+rule pair only ever produces one alert row, no
-    matter how many times a later run re-evaluates that vendor's ledger.
+    """One row per anomaly, snapshotting the invoice fields it refers to
+    rather than a foreign key -- the source ledger is never mirrored
+    locally. The (vendor_id, invoice_id, rule_name) unique constraint is
+    the dedup guard; see `detection/engine.py::persist_candidates`.
     """
 
     __tablename__ = "alerts"

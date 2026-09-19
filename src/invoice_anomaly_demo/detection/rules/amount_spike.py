@@ -2,28 +2,13 @@
 
 Fires when an invoice is more than `percent_above`% above the largest
 invoice that vendor billed in the preceding `comparison_months` -- a new
-high for that vendor over a meaningful stretch of time, by a clear margin.
-
-Two simpler designs are worth naming, because both fail in predictable
-ways on real accounts-payable data:
-
-  - median + k*MAD outlier test: measures spread around the *middle* of a
-    vendor's lifetime history. Vendors that mix small routine invoices
-    with occasional large ones (which is common) end up with a median far
-    below a normal invoice, so ordinary billing constantly lands above the
-    threshold.
-  - "largest of the previous N invoices": fixes the above, but N invoices
-    covers wildly different spans of time depending on how often a vendor
-    bills -- a week for a daily biller, years for a quarterly one, so the
-    same N means something different for every vendor.
-
-A trailing time window (rather than a trailing invoice count) is stable
-across billing frequencies and matches the question a reviewer actually
-asks: "has this vendor ever billed this much in the last year?"
+high over a meaningful stretch of time, not just "bigger than usual".
+A trailing time window (rather than a trailing invoice count) stays
+meaningful regardless of how often a vendor bills; see README for the two
+simpler designs this replaced and why they failed on real data.
 
 Cold-start guarded by `min_history_count`: a vendor needs at least that
-many invoices inside the comparison window before "new high" means
-anything.
+many invoices inside the window before "new high" means anything.
 """
 from __future__ import annotations
 

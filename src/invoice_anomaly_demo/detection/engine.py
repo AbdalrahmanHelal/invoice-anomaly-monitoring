@@ -1,33 +1,17 @@
-"""Detection engine.
+"""Detection engine: evaluate one vendor's ledger, then persist candidates.
 
-Two layers, split for testability:
-
-  - `evaluate_vendor_ledger` is pure: runs the enabled rules against one
-    vendor's full ledger and returns candidates. No DB, no I/O. A vendor's
-    *full* ledger (history + today) is always used as context -- duplicate
-    grouping, same-day counts, and the amount-spike window all need the
-    complete picture to know what is normal for that vendor -- but if
-    `new_keys` is given, candidates are filtered down to only invoices in
-    that set before returning.
-
-    This filter is not optional in a real system. Without it, the first
-    time any vendor is evaluated, its entire history would surface as "new"
-    candidates simultaneously: a single new invoice for a vendor whose
-    baseline happens to contain a few old outliers would flood out alerts
-    for invoices from years ago, alongside the one thing that actually just
-    happened. A dedup guard on write only stops the SAME invoice+rule from
-    alerting *twice* -- it does nothing to stop that first-touch flood the
-    first time a vendor is looked at, which is exactly why the filter has
-    to live here, before persistence, not after it.
-
-  - `persist_candidates` applies the SQLite dedup guard and writes new
-    `Alert` rows.
+`evaluate_vendor_ledger` is pure -- no DB, no I/O -- and takes an optional
+`new_keys` filter so a vendor's full history can be used as rule context
+without every historical match becoming an alert (see its docstring).
+`persist_candidates` writes candidates through the DB's own dedup
+constraint rather than checking first, so a duplicate write is a no-op
+instead of a race.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from invoice_anomaly_demo.db.models import Alert
@@ -55,9 +39,10 @@ def evaluate_vendor_ledger(
 ) -> list[AlertCandidate]:
     """Run every enabled rule against one vendor's full ledger.
 
-    `new_keys`, if given, is the set of `invoice_id`s eligible to become
-    candidates -- everything else in `ledger` is context only. See the
-    module docstring for why this matters.
+    Rules see the *complete* ledger (history + today) so they can judge
+    what's normal for that vendor, but if `new_keys` is given, candidates
+    are filtered to only invoices in that set -- otherwise a vendor's
+    entire history would surface as "new" the first time it's evaluated.
     """
     rules_section: dict = rules_config.get("rules", {})
     candidates: list[AlertCandidate] = []
@@ -75,26 +60,20 @@ def evaluate_vendor_ledger(
 
 
 def persist_candidates(session: Session, candidates: list[AlertCandidate]) -> DetectResult:
-    """Apply the dedup guard and write new Alert rows for the given candidates."""
+    """Write new Alert rows, relying on the DB's unique constraint (not a
+    prior SELECT) as the dedup guard: each insert targets
+    `ON CONFLICT (vendor_id, invoice_id, rule_name) DO NOTHING`, so a
+    duplicate candidate is a genuine no-op at the database level rather
+    than a check-then-write that a concurrent writer could race.
+    """
     result = DetectResult(vendors_checked=0, alerts_created=0, alerts_skipped=0)
 
     for candidate in candidates:
         inv = candidate.invoice
 
-        existing = session.execute(
-            select(Alert).where(
-                Alert.vendor_id == inv.vendor_id,
-                Alert.invoice_id == inv.invoice_id,
-                Alert.rule_name == candidate.rule_name,
-            )
-        ).scalar_one_or_none()
-
-        if existing is not None:
-            result.alerts_skipped += 1
-            continue
-
-        session.add(
-            Alert(
+        stmt = (
+            sqlite_insert(Alert)
+            .values(
                 vendor_id=inv.vendor_id,
                 vendor_name=inv.vendor_name,
                 invoice_id=inv.invoice_id,
@@ -104,9 +83,15 @@ def persist_candidates(session: Session, candidates: list[AlertCandidate]) -> De
                 severity=candidate.severity,
                 message=candidate.message,
             )
+            .on_conflict_do_nothing(index_elements=["vendor_id", "invoice_id", "rule_name"])
         )
-        result.alerts_created += 1
-        result.candidates.append(candidate)
+        inserted = session.execute(stmt).rowcount
+
+        if inserted:
+            result.alerts_created += 1
+            result.candidates.append(candidate)
+        else:
+            result.alerts_skipped += 1
 
     return result
 
@@ -117,13 +102,9 @@ def run_monitoring_cycle(
     history_by_vendor: dict[str, list[Invoice]],
     todays_activity_by_vendor: dict[str, list[Invoice]],
 ) -> DetectResult:
-    """The orchestration a real run performs: for every vendor with activity
-    today, build their full ledger (history + today), evaluate it, and
-    persist genuinely new alerts.
-
-    Vendors with no activity today are never touched -- there is nothing new
-    to alert on, and re-scanning a dormant vendor's full history for no
-    reason is wasted work in a system where "full history" can span years.
+    """For every vendor with activity today, build their full ledger
+    (history + today), evaluate it, and persist genuinely new alerts.
+    Vendors with no activity today are skipped -- nothing new to alert on.
     """
     total = DetectResult(vendors_checked=0, alerts_created=0, alerts_skipped=0)
 

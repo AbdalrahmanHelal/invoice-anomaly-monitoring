@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from importlib import resources
 
 import yaml
 
@@ -19,8 +20,20 @@ from invoice_anomaly_demo.digest import render_digest
 from invoice_anomaly_demo.synthetic_data import generate_demo_dataset
 
 
-def run(rules_path: str = "config/rules.yaml", db_path: str = "invoice_anomaly_demo.db", seed: int = 7) -> None:
-    rules_config = yaml.safe_load(open(rules_path, encoding="utf-8"))
+def _load_rules_config(rules_path: str | None) -> dict:
+    """Load rules.yaml from an explicit path, or fall back to the copy
+    shipped inside the package -- so the default works from any working
+    directory and any install method, not just `pip install -e` from the
+    repo root."""
+    if rules_path is not None:
+        return yaml.safe_load(open(rules_path, encoding="utf-8"))
+
+    packaged = resources.files("invoice_anomaly_demo").joinpath("config/rules.yaml")
+    return yaml.safe_load(packaged.read_text(encoding="utf-8"))
+
+
+def run(rules_path: str | None = None, db_path: str = "invoice_anomaly_demo.db", seed: int = 7) -> None:
+    rules_config = _load_rules_config(rules_path)
     dataset = generate_demo_dataset(seed=seed)
 
     session_factory = make_session_factory(db_path)
@@ -43,7 +56,7 @@ def run(rules_path: str = "config/rules.yaml", db_path: str = "invoice_anomaly_d
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="invoice-anomaly-demo")
-    parser.add_argument("--rules", default="config/rules.yaml", help="Path to rules.yaml")
+    parser.add_argument("--rules", default=None, help="Path to a custom rules.yaml (defaults to the packaged config)")
     parser.add_argument("--db", default="invoice_anomaly_demo.db", help="SQLite dedup log path")
     parser.add_argument("--seed", type=int, default=7, help="Synthetic data random seed")
     args = parser.parse_args()
