@@ -148,7 +148,7 @@ correctly produce nothing.
 
 ```bash
 pip install -e ".[dev]"
-pytest                     # 25 tests, pure/in-memory except the SQLite dedup cases
+pytest                     # 42 tests, pure/in-memory except the SQLite dedup cases
 invoice-anomaly-demo       # generates data, runs detection, prints a digest
 ```
 
@@ -170,6 +170,42 @@ docker run --rm invoice-anomaly-demo
 
 CI runs the test suite on every push and pull request
 (`.github/workflows/test.yml`).
+
+## Finance UI (Streamlit)
+
+A reviewer-facing screen over the same rules — no rule logic lives in the UI.
+
+```bash
+pip install -e ".[ui]"
+streamlit run app/streamlit_app.py
+```
+
+- **Sample data** — the synthetic dataset above, in daily-monitoring mode.
+- **Upload your export** — CSV or Excel, one row per invoice. Column names
+  are auto-detected for common layouts (SAP FBL1N labels such as `Account`,
+  `DocumentNo`, `Pstng Date`, `Amount in LC`; SAP field names such as
+  `LIFNR`, `BELNR`, `BUDAT`, `DMBTR`; and generic names), and can be
+  remapped by hand. `;`-separated files, `dd.mm.yyyy` dates and SAP's
+  trailing-minus amounts (`4,502.00-`) are handled. Rows that can't be read
+  are listed, not silently dropped. `examples/sample_fbl1n_export.csv` is
+  the synthetic dataset in that format.
+- **Two scan modes** — *daily monitoring* (only invoices on/after a date can
+  alert; the rest is history) and *audit the whole file* (every invoice is
+  judged against the history around it, after a configurable warm-up per
+  vendor so the first weeks of history don't all read as "first time").
+- **Headline figures** — amount under review (each flagged invoice counted
+  once) and potential duplicate payments (the extra copies in a duplicate
+  group).
+- One finding per real issue: a duplicate pair is one card, not two.
+- Vendor history chart per finding, an email preview of the morning digest,
+  and CSV / Excel export of all findings.
+- Rule thresholds are adjustable from the sidebar for the session;
+  `rules.yaml` stays the source of defaults.
+
+The file is read in memory by the local Streamlit process only.
+
+Code: `csv_import.py` (file → `Invoice`), `review.py` (runs the engine,
+groups candidates into findings, computes totals), `app/streamlit_app.py`.
 
 ## Limitations
 
