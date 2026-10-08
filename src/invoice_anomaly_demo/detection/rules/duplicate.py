@@ -2,9 +2,13 @@
 
 Fires when a vendor has >= min_count invoices for the exact same amount on
 the exact same day, unless that vendor already repeats amounts on more than
-`normal_repeat_rate` of their *other* billing days (see README for why).
-The day being judged is excluded from its own baseline so it can never
-justify itself.
+`normal_repeat_rate` of their *other* days with >= min_count invoices (see
+README for why). A repeat can only happen on such a day, so single-invoice
+days are left out of the baseline -- otherwise a batch biller's quiet days
+dilute the rate and their routine batches look unusual. The rate is only
+trusted once there are `min_baseline_days` such days to judge from. The day
+being judged is excluded from its own baseline so it can never justify
+itself.
 """
 from __future__ import annotations
 
@@ -21,13 +25,18 @@ class DuplicateRule(BaseRule):
         cfg = rules_config.get(self.name, {})
         min_count: int = cfg.get("min_count", 2)
         severity: str = cfg.get("severity", "high")
-        normal_repeat_rate: float = cfg.get("normal_repeat_rate", 0.05)
+        normal_repeat_rate: float = cfg.get("normal_repeat_rate", 0.10)
+        min_baseline_days: int = cfg.get("min_baseline_days", 5)
 
         groups: dict[tuple, list[Invoice]] = {}
+        invoices_per_day: dict = {}
         for inv in ledger:
             groups.setdefault((inv.posting_date, inv.amount), []).append(inv)
+            invoices_per_day[inv.posting_date] = invoices_per_day.get(inv.posting_date, 0) + 1
 
-        active_days = {inv.posting_date for inv in ledger}
+        # Only days with enough invoices to *contain* a repeat can tell us
+        # how often this vendor repeats.
+        multi_invoice_days = {d for d, n in invoices_per_day.items() if n >= min_count}
         repeat_days = {
             posting_date
             for (posting_date, _amount), invoices in groups.items()
@@ -39,19 +48,19 @@ class DuplicateRule(BaseRule):
             if len(invoices) < min_count:
                 continue
 
-            other_days = active_days - {posting_date}
+            other_days = multi_invoice_days - {posting_date}
             other_repeat_days = repeat_days - {posting_date}
-            if other_days:
-                rate = len(other_repeat_days) / len(other_days)
-                if rate > normal_repeat_rate:
-                    continue  # routine for this vendor -- not an anomaly
+            enough_baseline = len(other_days) >= min_baseline_days
+            if enough_baseline and len(other_repeat_days) / len(other_days) > normal_repeat_rate:
+                continue  # routine for this vendor -- not an anomaly
 
             if not other_repeat_days:
                 context = "This is the first time they have billed the same amount more than once in a day."
             else:
                 context = (
                     f"They have only done this on {len(other_repeat_days)} of their "
-                    f"{len(other_days)} other billing days."
+                    f"{len(other_days)} other days with {min_count} or more invoices"
+                    + ("." if enough_baseline else " -- too few to call it routine.")
                 )
 
             invoice_ids = ", ".join(sorted(i.invoice_id for i in invoices))

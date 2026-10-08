@@ -9,10 +9,16 @@ rules:
     min_count: 2
     # ...but only when repeating is UNUSUAL for that vendor. If a vendor
     # bills a repeated amount on more than this fraction of their other
-    # billing days, that is simply how they invoice (instalments,
-    # per-unit/per-vehicle billing) and is not flagged. A vendor doing it
-    # for the first time always alerts, regardless of this rate.
+    # days with min_count+ invoices, that is simply how they invoice
+    # (instalments, per-unit/per-vehicle billing, month-end batches) and is
+    # not flagged. Single-invoice days are left out: a repeat cannot happen
+    # on them, so counting them would dilute a batch biller's rate. A
+    # vendor doing it for the first time always alerts, regardless of this
+    # rate.
     normal_repeat_rate: 0.10
+    # The rate is only trusted once the vendor has at least this many other
+    # min_count+ invoice days -- "1 of 1" is not a pattern.
+    min_baseline_days: 5
 
   same_day_count:
     enabled: true

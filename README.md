@@ -69,10 +69,14 @@ render_digest() ─▶ plain-text summary, printed to stdout
 
 **`duplicate`** — fires when a vendor has two or more invoices for the same
 amount on the same day, *unless* that vendor already repeats amounts on
-more than a configured fraction of their other billing days (default 10%).
-A vendor doing it for the first time always alerts; a rare repeat still
-alerts. The day being judged is excluded from its own baseline so it can
-never justify itself.
+more than a configured fraction (default 10%) of their other days with two
+or more invoices. Single-invoice days are left out of that baseline: a
+repeat can't happen on them, so counting them would let a batch biller's
+quiet days dilute the rate and make their routine month-end repeats look
+unusual. The rate is only trusted once there are at least
+`min_baseline_days` such days (default 5); below that, or for a vendor
+doing it for the first time, it alerts. A rare repeat still alerts. The day being judged is excluded from its own
+baseline so it can never justify itself.
 
 **`same_day_count`** — fires when a vendor posts more invoices in a day
 than ever before, *and* that count clears a floor (default 5) — a vendor
@@ -148,7 +152,7 @@ correctly produce nothing.
 
 ```bash
 pip install -e ".[dev]"
-pytest                     # 42 tests, pure/in-memory except the SQLite dedup cases
+pytest                     # 45 tests, pure/in-memory except the SQLite dedup cases
 invoice-anomaly-demo       # generates data, runs detection, prints a digest
 ```
 

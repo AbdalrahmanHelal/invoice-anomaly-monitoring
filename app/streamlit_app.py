@@ -201,7 +201,7 @@ with st.sidebar:
         r["duplicate"]["enabled"] = st.checkbox("Duplicate check", r["duplicate"]["enabled"])
         r["duplicate"]["normal_repeat_rate"] = (
             st.slider(
-                "Ignore repeats if vendor repeats on more than (%) of days",
+                "Ignore repeats if vendor repeats on more than (%) of their multi-invoice days",
                 0, 50, int(r["duplicate"]["normal_repeat_rate"] * 100),
             )
             / 100
